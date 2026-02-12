@@ -40,11 +40,17 @@ def load_csv_from_github(path, columns):
 # GitHub에 CSV 저장
 # ---------------------------------------------------
 def save_csv_to_github(df, path, message):
+
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
 
-    # 기존 sha 가져오기
-    old = requests.get(url, headers=headers)
-    sha = old.json().get("sha") if old.status_code == 200 else None
+    # ⭐ 여기 수정
+    get_url = f"{url}?ref={GITHUB_BRANCH}"
+
+    old = requests.get(get_url, headers=headers)
+
+    sha = None
+    if old.status_code == 200:
+        sha = old.json().get("sha")
 
     content = base64.b64encode(df.to_csv(index=False).encode()).decode()
 
@@ -58,14 +64,12 @@ def save_csv_to_github(df, path, message):
         payload["sha"] = sha
 
     res = requests.put(url, headers=headers, data=json.dumps(payload))
-    
-    ## 임시
-    res = requests.put(url, headers=headers, data=json.dumps(payload))
 
     st.write("Status:", res.status_code)
     st.write("Response:", res.text)
 
     return res.status_code in [200, 201]
+
 
 
 
