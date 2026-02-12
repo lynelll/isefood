@@ -1,15 +1,33 @@
 import streamlit as st
 import pandas as pd
+import os
 from datetime import datetime
 
 st.set_page_config(page_title="이세푸드", layout="wide")
 st.title("🛒 이세푸드 공동구매 관리")
 
 # -----------------------------------
-# 세션 초기화
+# 파일 경로
 # -----------------------------------
-if "product_data" not in st.session_state:
-    st.session_state.product_data = {}
+ITEM_FILE = "items.csv"
+ORDER_FILE = "orders.csv"
+
+# -----------------------------------
+# 파일 없으면 생성
+# -----------------------------------
+if not os.path.exists(ITEM_FILE):
+    pd.DataFrame(columns=["item_name", "created_at"]).to_csv(ITEM_FILE, index=False)
+
+if not os.path.exists(ORDER_FILE):
+    pd.DataFrame(
+        columns=["item_name", "name", "phone", "qty", "received", "created_at"]
+    ).to_csv(ORDER_FILE, index=False)
+
+# -----------------------------------
+# 데이터 로드
+# -----------------------------------
+items_df = pd.read_csv(ITEM_FILE)
+orders_df = pd.read_csv(ORDER_FILE)
 
 # ===================================
 # 1️⃣ 품목 추가
@@ -23,14 +41,17 @@ with col1:
 
 with col2:
     if st.button("추가"):
-        if new_item and new_item not in st.session_state.product_data:
-            st.session_state.product_data[new_item] = {
-                "created_at": datetime.now(),
-                "orders": pd.DataFrame(
-                    columns=["이름", "핸드폰번호", "수량"]
-                )
-            }
+        if new_item and new_item not in items_df["item_name"].values:
+            new_row = pd.DataFrame(
+                [[new_item, datetime.now()]],
+                columns=["item_name", "created_at"]
+            )
+
+            items_df = pd.concat([items_df, new_row], ignore_index=True)
+            items_df.to_csv(ITEM_FILE, index=False)
+
             st.success(f"{new_item} 추가 완료")
+            st.rerun()
 
 st.markdown("---")
 
@@ -39,11 +60,9 @@ st.markdown("---")
 # ===================================
 st.header("🧾 주문자 추가")
 
-if st.session_state.product_data:
+if not items_df.empty:
 
-    item_list = list(st.session_state.product_data.keys())
-
-    selected_item = st.selectbox("품목 선택", item_list)
+    selected_item = st.selectbox("품목 선택", items_df["item_name"].tolist())
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -59,20 +78,24 @@ if st.session_state.product_data:
     with col4:
         if st.button("주문 추가"):
             if name and phone:
-                new_row = pd.DataFrame(
-                    [[name, phone, qty]],
-                    columns=["이름", "핸드폰번호", "수량"]
+
+                new_order = pd.DataFrame(
+                    [[selected_item, name, phone, qty, False, datetime.now()]],
+                    columns=[
+                        "item_name",
+                        "name",
+                        "phone",
+                        "qty",
+                        "received",
+                        "created_at",
+                    ],
                 )
 
-                st.session_state.product_data[selected_item]["orders"] = pd.concat(
-                    [
-                        st.session_state.product_data[selected_item]["orders"],
-                        new_row
-                    ],
-                    ignore_index=True
-                )
+                orders_df = pd.concat([orders_df, new_order], ignore_index=True)
+                orders_df.to_csv(ORDER_FILE, index=False)
 
                 st.success("주문 추가 완료")
+                st.rerun()
 
     st.markdown("---")
 
@@ -81,12 +104,12 @@ if st.session_state.product_data:
     # ===================================
     st.subheader(f"📋 {selected_item} 주문 목록")
 
-    order_df = st.session_state.product_data[selected_item]["orders"]
+    filtered_orders = orders_df[orders_df["item_name"] == selected_item]
 
-    st.dataframe(order_df, use_container_width=True)
+    st.dataframe(filtered_orders, use_container_width=True)
 
-    if not order_df.empty:
-        total_qty = order_df["수량"].sum()
+    if not filtered_orders.empty:
+        total_qty = filtered_orders["qty"].sum()
         st.info(f"총 주문 수량: {total_qty}개")
 
 else:
