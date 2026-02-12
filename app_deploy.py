@@ -58,7 +58,15 @@ def save_csv_to_github(df, path, message):
         payload["sha"] = sha
 
     res = requests.put(url, headers=headers, data=json.dumps(payload))
+    
+    ## 임시
+    res = requests.put(url, headers=headers, data=json.dumps(payload))
+
+    st.write("Status:", res.status_code)
+    st.write("Response:", res.text)
+
     return res.status_code in [200, 201]
+
 
 
 # ---------------------------------------------------
