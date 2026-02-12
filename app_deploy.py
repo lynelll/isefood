@@ -1,46 +1,77 @@
 import streamlit as st
 import pandas as pd
-import os
+import requests
+import base64
+import json
+from io import StringIO
 from datetime import datetime
 
 st.set_page_config(page_title="이세푸드", layout="wide")
 st.title("🛒 이세푸드 공동구매 관리")
 
-# -----------------------------------
-# 파일 경로
-# -----------------------------------
-ITEM_FILE = "items.csv"
-ORDER_FILE = "orders.csv"
+# ---------------------------------------------------
+# GitHub 설정
+# ---------------------------------------------------
+GITHUB_TOKEN  = st.secrets["GITHUB_TOKEN"]
+GITHUB_REPO   = st.secrets["GITHUB_REPO"]
+GITHUB_BRANCH = st.secrets["GITHUB_BRANCH"]
 
-# -----------------------------------
-# 파일 없으면 생성
-# -----------------------------------
-if not os.path.exists(ITEM_FILE):
-    pd.DataFrame(columns=["item_name", "created_at"]).to_csv(ITEM_FILE, index=False)
+ITEM_PATH  = "items.csv"
+ORDER_PATH = "orders.csv"
 
-if not os.path.exists(ORDER_FILE):
-    pd.DataFrame(
-        columns=["item_name", "name", "phone", "qty", "received", "created_at"]
-    ).to_csv(ORDER_FILE, index=False)
+headers = {"Authorization": f"token {GITHUB_TOKEN}"}
 
-# -----------------------------------
-# 데이터 로드 (phone 문자열 유지)
-# -----------------------------------
-items_df = pd.read_csv(
-    ITEM_FILE,
-    dtype={"item_name": str, "created_at": str}
+
+# ---------------------------------------------------
+# GitHub에서 CSV 불러오기
+# ---------------------------------------------------
+def load_csv_from_github(path, columns):
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}?ref={GITHUB_BRANCH}"
+    res = requests.get(url, headers=headers)
+
+    if res.status_code == 200:
+        content = base64.b64decode(res.json()["content"]).decode()
+        return pd.read_csv(StringIO(content), dtype=str)
+    else:
+        return pd.DataFrame(columns=columns)
+
+
+# ---------------------------------------------------
+# GitHub에 CSV 저장
+# ---------------------------------------------------
+def save_csv_to_github(df, path, message):
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
+
+    # 기존 sha 가져오기
+    old = requests.get(url, headers=headers)
+    sha = old.json().get("sha") if old.status_code == 200 else None
+
+    content = base64.b64encode(df.to_csv(index=False).encode()).decode()
+
+    payload = {
+        "message": message,
+        "content": content,
+        "branch": GITHUB_BRANCH,
+    }
+
+    if sha:
+        payload["sha"] = sha
+
+    res = requests.put(url, headers=headers, data=json.dumps(payload))
+    return res.status_code in [200, 201]
+
+
+# ---------------------------------------------------
+# 데이터 로드
+# ---------------------------------------------------
+items_df = load_csv_from_github(
+    ITEM_PATH,
+    ["item_name", "created_at"]
 )
 
-orders_df = pd.read_csv(
-    ORDER_FILE,
-    dtype={
-        "item_name": str,
-        "name": str,
-        "phone": str,   # 앞자리 0 유지
-        "qty": int,
-        "received": bool,
-        "created_at": str,
-    },
+orders_df = load_csv_from_github(
+    ORDER_PATH,
+    ["item_name", "name", "phone", "qty", "received", "created_at"]
 )
 
 # ===================================
@@ -48,7 +79,7 @@ orders_df = pd.read_csv(
 # ===================================
 st.header("📦 품목 추가")
 
-col1, col2 = st.columns([3, 1])
+col1, col2 = st.columns([3,1])
 
 with col1:
     new_item = st.text_input("품목 이름")
@@ -62,10 +93,12 @@ with col2:
             )
 
             items_df = pd.concat([items_df, new_row], ignore_index=True)
-            items_df.to_csv(ITEM_FILE, index=False)
 
-            st.success(f"{new_item} 추가 완료")
-            st.rerun()
+            if save_csv_to_github(items_df, ITEM_PATH, "update items"):
+                st.success("품목 저장 완료")
+                st.rerun()
+            else:
+                st.error("저장 실패")
 
 st.markdown("---")
 
@@ -97,9 +130,9 @@ if not items_df.empty:
                     [[
                         selected_item,
                         name,
-                        str(phone),  # 문자열 강제
+                        str(phone),
                         qty,
-                        False,
+                        "False",
                         datetime.now().strftime("%Y-%m-%d")
                     ]],
                     columns=[
@@ -113,16 +146,15 @@ if not items_df.empty:
                 )
 
                 orders_df = pd.concat([orders_df, new_order], ignore_index=True)
-                orders_df.to_csv(ORDER_FILE, index=False)
 
-                st.success("주문 추가 완료")
-                st.rerun()
+                if save_csv_to_github(orders_df, ORDER_PATH, "update orders"):
+                    st.success("주문 저장 완료")
+                    st.rerun()
+                else:
+                    st.error("저장 실패")
 
     st.markdown("---")
 
-    # ===================================
-    # 3️⃣ 주문 테이블 표시
-    # ===================================
     st.subheader(f"📋 {selected_item} 주문 목록")
 
     filtered_orders = orders_df[orders_df["item_name"] == selected_item]
@@ -130,7 +162,7 @@ if not items_df.empty:
     st.dataframe(filtered_orders, use_container_width=True)
 
     if not filtered_orders.empty:
-        total_qty = filtered_orders["qty"].sum()
+        total_qty = filtered_orders["qty"].astype(int).sum()
         st.info(f"총 주문 수량: {total_qty}개")
 
 else:
