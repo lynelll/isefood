@@ -24,10 +24,24 @@ if not os.path.exists(ORDER_FILE):
     ).to_csv(ORDER_FILE, index=False)
 
 # -----------------------------------
-# 데이터 로드
+# 데이터 로드 (phone 문자열 유지)
 # -----------------------------------
-items_df = pd.read_csv(ITEM_FILE)
-orders_df = pd.read_csv(ORDER_FILE)
+items_df = pd.read_csv(
+    ITEM_FILE,
+    dtype={"item_name": str, "created_at": str}
+)
+
+orders_df = pd.read_csv(
+    ORDER_FILE,
+    dtype={
+        "item_name": str,
+        "name": str,
+        "phone": str,   # 앞자리 0 유지
+        "qty": int,
+        "received": bool,
+        "created_at": str,
+    },
+)
 
 # ===================================
 # 1️⃣ 품목 추가
@@ -43,7 +57,7 @@ with col2:
     if st.button("추가"):
         if new_item and new_item not in items_df["item_name"].values:
             new_row = pd.DataFrame(
-                [[new_item, datetime.now()]],
+                [[new_item, datetime.now().strftime("%Y-%m-%d")]],
                 columns=["item_name", "created_at"]
             )
 
@@ -80,7 +94,14 @@ if not items_df.empty:
             if name and phone:
 
                 new_order = pd.DataFrame(
-                    [[selected_item, name, phone, qty, False, datetime.now()]],
+                    [[
+                        selected_item,
+                        name,
+                        str(phone),  # 문자열 강제
+                        qty,
+                        False,
+                        datetime.now().strftime("%Y-%m-%d")
+                    ]],
                     columns=[
                         "item_name",
                         "name",
