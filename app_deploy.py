@@ -184,7 +184,7 @@ if not orders_df.empty:
             filtered_df["phone"].str[-4:] == search_phone_last4
         ]
 
-    # 🔥 핵심 pivot
+    # 🔥 사람 기준 pivot
     pivot_df = filtered_df.pivot_table(
         index=["name", "phone"],
         columns="item_name",
@@ -193,12 +193,58 @@ if not orders_df.empty:
         fill_value=0
     ).reset_index()
 
-    # 총합 컬럼 추가
-    item_columns = [col for col in pivot_df.columns if col not in ["name", "phone"]]
-    pivot_df["총합"] = pivot_df[item_columns].sum(axis=1)
+    # 🔥 모든 품목 컬럼 강제 생성
+    all_items = items_df["item_name"].tolist()
 
-    st.dataframe(pivot_df, use_container_width=True)
+    for item in all_items:
+        if item not in pivot_df.columns:
+            pivot_df[item] = 0
+
+    # 컬럼 정렬
+    pivot_df = pivot_df[["name", "phone"] + all_items]
+
+    # 🔥 사람 기준 수령 여부
+    received_map = (
+        filtered_df.groupby(["name", "phone"])["received"]
+        .all()
+        .reset_index()
+        .rename(columns={"received": "수령"})
+    )
+
+    pivot_df = pivot_df.merge(received_map, on=["name", "phone"], how="left")
+    pivot_df["수령"] = pivot_df["수령"].fillna(False)
+
+    # 🔥 수령 체크박스 표시
+    edited_df = st.data_editor(
+        pivot_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "수령": st.column_config.CheckboxColumn("수령")
+        },
+        key="pivot_editor"
+    )
+
+    # 🔥 수령 저장
+    if st.button("💾 수령 상태 저장"):
+
+        for _, row in edited_df.iterrows():
+            name = row["name"]
+            phone = row["phone"]
+            received_value = str(row["수령"])
+
+            mask = (
+                (orders_df["name"] == name) &
+                (orders_df["phone"] == phone)
+            )
+
+            orders_df.loc[mask, "received"] = received_value
+
+        if save_csv_to_github(orders_df, ORDER_PATH, "update received status"):
+            st.success("수령 상태 저장 완료")
+            st.rerun()
+        else:
+            st.error("저장 실패")
 
 else:
     st.info("아직 주문이 없습니다.")
-
