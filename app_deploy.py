@@ -8,24 +8,24 @@ st.title("🛒 이세푸드 공동구매 관리")
 # -----------------------------------
 # 세션 초기화
 # -----------------------------------
-if "items" not in st.session_state:
-    st.session_state.items = {}
+if "product_data" not in st.session_state:
+    st.session_state.product_data = {}
 
 # ===================================
 # 1️⃣ 품목 추가
 # ===================================
 st.header("📦 품목 추가")
 
-col1, col2 = st.columns([3,1])
+col1, col2 = st.columns([3, 1])
 
 with col1:
     new_item = st.text_input("품목 이름")
 
 with col2:
     if st.button("추가"):
-        if new_item and new_item not in st.session_state.items:
-            st.session_state.items[new_item] = {
-                "created_at": datetime.now(),  # 날짜 저장
+        if new_item and new_item not in st.session_state.product_data:
+            st.session_state.product_data[new_item] = {
+                "created_at": datetime.now(),
                 "orders": pd.DataFrame(
                     columns=["이름", "핸드폰번호", "수량"]
                 )
@@ -39,9 +39,9 @@ st.markdown("---")
 # ===================================
 st.header("🧾 주문자 추가")
 
-if st.session_state.items:
+if st.session_state.product_data:
 
-    item_list = list(st.session_state.items.keys())
+    item_list = list(st.session_state.product_data.keys())
 
     selected_item = st.selectbox("품목 선택", item_list)
 
@@ -63,13 +63,15 @@ if st.session_state.items:
                     [[name, phone, qty]],
                     columns=["이름", "핸드폰번호", "수량"]
                 )
-                st.session_state.items[selected_item]["orders"] = pd.concat(
+
+                st.session_state.product_data[selected_item]["orders"] = pd.concat(
                     [
-                        st.session_state.items[selected_item]["orders"],
+                        st.session_state.product_data[selected_item]["orders"],
                         new_row
                     ],
                     ignore_index=True
                 )
+
                 st.success("주문 추가 완료")
 
     st.markdown("---")
@@ -79,7 +81,7 @@ if st.session_state.items:
     # ===================================
     st.subheader(f"📋 {selected_item} 주문 목록")
 
-    order_df = st.session_state.items[selected_item]["orders"]
+    order_df = st.session_state.product_data[selected_item]["orders"]
 
     st.dataframe(order_df, use_container_width=True)
 
