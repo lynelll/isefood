@@ -165,7 +165,7 @@ with col_search:
 # 🔹 아래 전체 주문 목록
 # ===================================================
 st.markdown("---")
-st.header("📋 전체 주문 목록")
+st.header("📋 전체 주문 목록 (이름 기준)")
 
 if not orders_df.empty:
 
@@ -184,34 +184,21 @@ if not orders_df.empty:
             filtered_df["phone"].str[-4:] == search_phone_last4
         ]
 
-    edited_orders = st.data_editor(
-        filtered_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "received": st.column_config.CheckboxColumn("수령"),
-        },
-        key="orders_editor"
-    )
+    # 🔥 핵심 pivot
+    pivot_df = filtered_df.pivot_table(
+        index=["name", "phone"],
+        columns="item_name",
+        values="qty",
+        aggfunc="sum",
+        fill_value=0
+    ).reset_index()
 
-    if st.button("💾 수령 상태 저장"):
+    # 총합 컬럼 추가
+    item_columns = [col for col in pivot_df.columns if col not in ["name", "phone"]]
+    pivot_df["총합"] = pivot_df[item_columns].sum(axis=1)
 
-        edited_orders["received"] = edited_orders["received"].astype(str)
-
-        # 필터 상태에서도 원본에 정확히 반영
-        for idx in edited_orders.index:
-            orders_df.loc[idx, "received"] = edited_orders.loc[idx, "received"]
-
-        if save_csv_to_github(orders_df, ORDER_PATH, "update received status"):
-            st.success("수령 상태 저장 완료")
-            st.rerun()
-        else:
-            st.error("저장 실패")
-
-    total_qty = filtered_df["qty"].sum()
-    received_qty = filtered_df[filtered_df["received"] == True]["qty"].sum()
-
-    st.info(f"전체 주문 수량: {total_qty}개 / 수령 완료: {received_qty}개")
+    st.dataframe(pivot_df, use_container_width=True)
 
 else:
     st.info("아직 주문이 없습니다.")
+
