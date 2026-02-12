@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 
 st.set_page_config(page_title="이세푸드", layout="wide")
 st.title("🛒 이세푸드 공동구매 관리")
@@ -10,20 +10,6 @@ st.title("🛒 이세푸드 공동구매 관리")
 # -----------------------------------
 if "items" not in st.session_state:
     st.session_state.items = {}
-
-# -----------------------------------
-# 7일 지난 품목 자동 삭제
-# -----------------------------------
-def clean_old_items():
-    now = datetime.now()
-    expired = []
-    for item, data in st.session_state.items.items():
-        if now - data["created_at"] > timedelta(days=7):
-            expired.append(item)
-    for item in expired:
-        del st.session_state.items[item]
-
-clean_old_items()
 
 # ===================================
 # 1️⃣ 품목 추가
@@ -39,7 +25,7 @@ with col2:
     if st.button("추가"):
         if new_item and new_item not in st.session_state.items:
             st.session_state.items[new_item] = {
-                "created_at": datetime.now(),
+                "created_at": datetime.now(),  # 날짜 저장
                 "orders": pd.DataFrame(
                     columns=["이름", "핸드폰번호", "수량"]
                 )
