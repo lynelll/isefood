@@ -167,15 +167,42 @@ if not items_df.empty:
 
     st.markdown("---")
 
-    st.subheader(f"📋 {selected_item} 주문 목록")
+    st.subheader("📋 전체 주문 목록")
 
-    filtered_orders = orders_df[orders_df["item_name"] == selected_item]
+    if not orders_df.empty:
 
-    st.dataframe(filtered_orders, use_container_width=True)
+        # 타입 정리
+        orders_df["qty"] = orders_df["qty"].astype(int)
+        orders_df["received"] = orders_df["received"].astype(str) == "True"
 
-    if not filtered_orders.empty:
-        total_qty = filtered_orders["qty"].astype(int).sum()
-        st.info(f"총 주문 수량: {total_qty}개")
+        edited_orders = st.data_editor(
+            orders_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "received": st.column_config.CheckboxColumn("수령"),
+            },
+            key="orders_editor"
+        )
+
+        if st.button("💾 수령 상태 저장"):
+            # 다시 문자열로 변환해서 저장
+            edited_orders["received"] = edited_orders["received"].astype(str)
+
+            if save_csv_to_github(edited_orders, ORDER_PATH, "update received status"):
+                st.success("수령 상태 저장 완료")
+                st.rerun()
+            else:
+                st.error("저장 실패")
+
+        total_qty = edited_orders["qty"].sum()
+        received_qty = edited_orders[edited_orders["received"] == True]["qty"].sum()
+
+        st.info(f"전체 주문 수량: {total_qty}개 / 수령 완료: {received_qty}개")
+
+    else:
+        st.info("아직 주문이 없습니다.")
+
 
 else:
     st.warning("먼저 품목을 추가해주세요.")
