@@ -21,7 +21,6 @@ ORDER_PATH = "orders.csv"
 
 headers = {"Authorization": f"token {GITHUB_TOKEN}"}
 
-
 # ---------------------------------------------------
 # GitHub에서 CSV 불러오기
 # ---------------------------------------------------
@@ -34,7 +33,6 @@ def load_csv_from_github(path, columns):
         return pd.read_csv(StringIO(content), dtype=str)
     else:
         return pd.DataFrame(columns=columns)
-
 
 # ---------------------------------------------------
 # GitHub에 CSV 저장
@@ -65,7 +63,6 @@ def save_csv_to_github(df, path, message):
 
     return res.status_code in [200, 201]
 
-
 # ---------------------------------------------------
 # 데이터 로드
 # ---------------------------------------------------
@@ -79,19 +76,18 @@ orders_df = load_csv_from_github(
     ["item_name", "name", "phone", "qty", "received", "created_at"]
 )
 
-# ---------------------------------------------------
-# 2단 레이아웃
-# ---------------------------------------------------
-left, right = st.columns([1, 2])
-
 # ===================================================
-# 🔹 좌측 패널
+# 🔹 상단 한 행 (3컬럼)
 # ===================================================
-with left:
+col_item, col_order, col_search = st.columns(3)
 
-    st.header("📦 품목 추가")
+# ----------------------------
+# 📦 품목 추가
+# ----------------------------
+with col_item:
+    st.subheader("📦 품목 추가")
 
-    new_item = st.text_input("품목 이름")
+    new_item = st.text_input("품목 이름", key="new_item")
 
     if st.button("품목 추가"):
         if new_item and new_item not in items_df["item_name"].values:
@@ -108,15 +104,23 @@ with left:
             else:
                 st.error("저장 실패")
 
-    st.markdown("---")
-    st.header("🧾 주문자 추가")
+# ----------------------------
+# 🧾 주문자 추가
+# ----------------------------
+with col_order:
+    st.subheader("🧾 주문자 추가")
 
     if not items_df.empty:
 
-        selected_item = st.selectbox("품목 선택", items_df["item_name"].tolist())
-        name = st.text_input("이름")
-        phone = st.text_input("핸드폰번호")
-        qty = st.number_input("수량", min_value=1, step=1)
+        selected_item = st.selectbox(
+            "품목 선택",
+            items_df["item_name"].tolist(),
+            key="select_item"
+        )
+
+        name = st.text_input("이름", key="order_name")
+        phone = st.text_input("핸드폰번호", key="order_phone")
+        qty = st.number_input("수량", min_value=1, step=1, key="order_qty")
 
         if st.button("주문 추가"):
             if name and phone:
@@ -148,64 +152,66 @@ with left:
                 else:
                     st.error("저장 실패")
 
-    st.markdown("---")
-    st.header("🔍 주문 검색")
+# ----------------------------
+# 🔍 주문 검색
+# ----------------------------
+with col_search:
+    st.subheader("🔍 주문 검색")
 
-    search_name = st.text_input("이름 검색")
-    search_phone_last4 = st.text_input("전화번호 뒤 4자리 검색 (4자리 입력)")
-
+    search_name = st.text_input("이름 검색", key="search_name")
+    search_phone_last4 = st.text_input("전화번호 뒤 4자리", key="search_phone")
 
 # ===================================================
-# 🔹 우측 패널
+# 🔹 아래 전체 주문 목록
 # ===================================================
-with right:
+st.markdown("---")
+st.header("📋 전체 주문 목록")
 
-    st.header("📋 전체 주문 목록")
+if not orders_df.empty:
 
-    if not orders_df.empty:
+    orders_df["qty"] = orders_df["qty"].astype(int)
+    orders_df["received"] = orders_df["received"].astype(str) == "True"
 
-        orders_df["qty"] = orders_df["qty"].astype(int)
-        orders_df["received"] = orders_df["received"].astype(str) == "True"
+    filtered_df = orders_df.copy()
 
-        filtered_df = orders_df.copy()
+    if search_name:
+        filtered_df = filtered_df[
+            filtered_df["name"].str.contains(search_name, na=False)
+        ]
 
-        if search_name:
-            filtered_df = filtered_df[
-                filtered_df["name"].str.contains(search_name, na=False)
-            ]
+    if search_phone_last4 and len(search_phone_last4) == 4:
+        filtered_df = filtered_df[
+            filtered_df["phone"].str[-4:] == search_phone_last4
+        ]
 
-        if search_phone_last4 and len(search_phone_last4) == 4:
-            filtered_df = filtered_df[
-                filtered_df["phone"].str[-4:] == search_phone_last4
-            ]
+    edited_orders = st.data_editor(
+        filtered_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "received": st.column_config.CheckboxColumn("수령"),
+        },
+        key="orders_editor"
+    )
 
-        edited_orders = st.data_editor(
-            filtered_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "received": st.column_config.CheckboxColumn("수령"),
-            },
-            key="orders_editor"
-        )
+    if st.button("💾 수령 상태 저장"):
 
-        if st.button("💾 수령 상태 저장"):
-            edited_orders["received"] = edited_orders["received"].astype(str)
+        edited_orders["received"] = edited_orders["received"].astype(str)
 
-            # 🔥 전체 데이터에 반영
-            for idx in edited_orders.index:
-                orders_df.loc[idx, "received"] = edited_orders.loc[idx, "received"]
+        # 필터 상태에서도 원본에 정확히 반영
+        for idx in edited_orders.index:
+            orders_df.loc[idx, "received"] = edited_orders.loc[idx, "received"]
 
-            if save_csv_to_github(orders_df, ORDER_PATH, "update received status"):
-                st.success("수령 상태 저장 완료")
-                st.rerun()
-            else:
-                st.error("저장 실패")
+        if save_csv_to_github(orders_df, ORDER_PATH, "update received status"):
+            st.success("수령 상태 저장 완료")
+            st.rerun()
+        else:
+            st.error("저장 실패")
 
-        total_qty = filtered_df["qty"].sum()
-        received_qty = filtered_df[filtered_df["received"] == True]["qty"].sum()
+    total_qty = filtered_df["qty"].sum()
+    received_qty = filtered_df[filtered_df["received"] == True]["qty"].sum()
 
-        st.info(f"전체 주문 수량: {total_qty}개 / 수령 완료: {received_qty}개")
+    st.info(f"전체 주문 수량: {total_qty}개 / 수령 완료: {received_qty}개")
 
-    else:
-        st.info("아직 주문이 없습니다.")
+else:
+    st.info("아직 주문이 없습니다.")
