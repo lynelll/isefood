@@ -150,9 +150,8 @@ if mode == "🧾 주문 입력 모드":
                     if save_csv_to_github(orders_df, ORDER_PATH, "update orders"):
                         st.success("주문 저장 완료")
                         st.rerun()
-
     # ----------------------------
-    # 📋 현재 주문 목록 (수정 가능)
+    # 📋 현재 주문 목록 (수정 + 삭제 + 수령상태 표시)
     # ----------------------------
     st.markdown("---")
     st.subheader("📋 현재 주문 목록 (수정 가능)")
@@ -160,6 +159,7 @@ if mode == "🧾 주문 입력 모드":
     if not orders_df.empty:
 
         orders_df["qty"] = orders_df["qty"].astype(int)
+        orders_df["received"] = orders_df["received"].astype(str) == "True"
 
         pivot_df = orders_df.pivot_table(
             index=["person_id", "name", "phone"],
@@ -177,33 +177,72 @@ if mode == "🧾 주문 입력 모드":
 
         pivot_df = pivot_df[["person_id", "name", "phone"] + all_items]
 
+        # 🔹 수령 상태 추가
+        received_map = (
+            orders_df.groupby("person_id")["received"]
+            .all()
+            .reset_index()
+            .rename(columns={"received": "수령"})
+        )
+
+        pivot_df = pivot_df.merge(received_map, on="person_id", how="left")
+        pivot_df["수령"] = pivot_df["수령"].fillna(False)
+
+        # 🔹 삭제 컬럼 추가
+        pivot_df["삭제"] = False
+
         edited_df = st.data_editor(
             pivot_df,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "person_id": None  # 🔥 완전 숨김
+                "person_id": None,
+                "수령": st.column_config.CheckboxColumn("수령", disabled=True),
+                "삭제": st.column_config.CheckboxColumn("삭제")
             }
         )
 
-        if st.button("💾 주문자 정보 저장"):
+        col_save, col_delete = st.columns(2)
 
-            for _, row in edited_df.iterrows():
+        # ----------------------------
+        # 💾 주문자 정보 저장
+        # ----------------------------
+        with col_save:
+            if st.button("💾 주문자 정보 저장"):
 
-                old_person_id = row["person_id"]
-                new_name = row["name"]
-                new_phone = row["phone"].replace("-", "").strip()
-                new_person_id = new_name + "_" + new_phone
+                for _, row in edited_df.iterrows():
 
-                mask = orders_df["person_id"] == old_person_id
+                    old_person_id = row["person_id"]
+                    new_name = row["name"]
+                    new_phone = row["phone"].replace("-", "").strip()
+                    new_person_id = new_name + "_" + new_phone
 
-                orders_df.loc[mask, "name"] = new_name
-                orders_df.loc[mask, "phone"] = new_phone
-                orders_df.loc[mask, "person_id"] = new_person_id
+                    mask = orders_df["person_id"] == old_person_id
 
-            if save_csv_to_github(orders_df, ORDER_PATH, "update order info"):
-                st.success("주문자 정보 수정 완료")
-                st.rerun()
+                    orders_df.loc[mask, "name"] = new_name
+                    orders_df.loc[mask, "phone"] = new_phone
+                    orders_df.loc[mask, "person_id"] = new_person_id
+
+                if save_csv_to_github(orders_df, ORDER_PATH, "update order info"):
+                    st.success("주문자 정보 수정 완료")
+                    st.rerun()
+
+        # ----------------------------
+        # 🗑 선택 주문자 삭제
+        # ----------------------------
+        with col_delete:
+            if st.button("🗑 선택 주문자 삭제"):
+
+                delete_rows = edited_df[edited_df["삭제"] == True]
+
+                for _, row in delete_rows.iterrows():
+                    orders_df = orders_df[
+                        orders_df["person_id"] != row["person_id"]
+                    ]
+
+                if save_csv_to_github(orders_df, ORDER_PATH, "delete orders"):
+                    st.success("선택 주문자 삭제 완료")
+                    st.rerun()
 
     else:
         st.info("아직 주문이 없습니다.")
