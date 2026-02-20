@@ -74,7 +74,6 @@ orders_df = load_csv_from_github(
 if not orders_df.empty:
     orders_df["phone"] = orders_df["phone"].str.replace("-", "").str.strip()
 
-    # person_id 없으면 생성 (구버전 대비)
     if "person_id" not in orders_df.columns:
         orders_df["person_id"] = orders_df["name"] + "_" + orders_df["phone"]
 
@@ -99,7 +98,6 @@ if mode == "🧾 주문 입력 모드":
     # ----------------------------
     with col_item:
         st.subheader("📦 품목 추가")
-
         new_item = st.text_input("품목 이름")
 
         if st.button("품목 추가"):
@@ -121,19 +119,13 @@ if mode == "🧾 주문 입력 모드":
         st.subheader("🧾 주문자 추가")
 
         if not items_df.empty:
-
-            selected_item = st.selectbox(
-                "품목 선택",
-                items_df["item_name"].tolist()
-            )
-
+            selected_item = st.selectbox("품목 선택", items_df["item_name"].tolist())
             name = st.text_input("이름")
             phone = st.text_input("핸드폰번호")
             qty = st.number_input("수량", min_value=1, step=1)
 
             if st.button("주문 추가"):
                 if name and phone:
-
                     phone = phone.replace("-", "").strip()
                     person_id = name + "_" + phone
 
@@ -148,13 +140,8 @@ if mode == "🧾 주문 입력 모드":
                             person_id
                         ]],
                         columns=[
-                            "item_name",
-                            "name",
-                            "phone",
-                            "qty",
-                            "received",
-                            "created_at",
-                            "person_id"
+                            "item_name","name","phone",
+                            "qty","received","created_at","person_id"
                         ],
                     )
 
@@ -194,7 +181,9 @@ if mode == "🧾 주문 입력 모드":
             pivot_df,
             use_container_width=True,
             hide_index=True,
-            disabled=["person_id"]
+            column_config={
+                "person_id": None  # 🔥 완전 숨김
+            }
         )
 
         if st.button("💾 주문자 정보 저장"):
@@ -226,12 +215,10 @@ if mode == "📦 수령 확인 모드":
 
     left_col, right_col = st.columns([1, 2])
 
-    # 🔍 전화번호 검색
     with left_col:
         st.subheader("🔍 전화번호 검색 (뒤 4자리)")
         search_phone_last4 = st.text_input("전화번호 뒤 4자리")
 
-    # 📌 검색 결과 카드
     with right_col:
 
         if search_phone_last4 and len(search_phone_last4) == 4:
@@ -246,12 +233,12 @@ if mode == "📦 수령 확인 모드":
 
                 grouped = (
                     summary_df
-                    .groupby(["name", "phone", "item_name"])["qty"]
+                    .groupby(["name","phone","item_name"])["qty"]
                     .sum()
                     .reset_index()
                 )
 
-                for (name, phone) in grouped[["name", "phone"]].drop_duplicates().values:
+                for (name, phone) in grouped[["name","phone"]].drop_duplicates().values:
 
                     person_df = grouped[
                         (grouped["name"] == name) &
@@ -276,9 +263,6 @@ if mode == "📦 수령 확인 모드":
             else:
                 st.warning("검색 결과가 없습니다.")
 
-    # ----------------------------
-    # 전체 수령 관리
-    # ----------------------------
     st.markdown("---")
     st.header("📋 전체 수령 관리")
 
@@ -288,7 +272,7 @@ if mode == "📦 수령 확인 모드":
         orders_df["received"] = orders_df["received"].astype(str) == "True"
 
         pivot_df = orders_df.pivot_table(
-            index=["person_id", "name", "phone"],
+            index=["person_id","name","phone"],
             columns="item_name",
             values="qty",
             aggfunc="sum",
@@ -301,13 +285,13 @@ if mode == "📦 수령 확인 모드":
             if item not in pivot_df.columns:
                 pivot_df[item] = 0
 
-        pivot_df = pivot_df[["person_id", "name", "phone"] + all_items]
+        pivot_df = pivot_df[["person_id","name","phone"] + all_items]
 
         received_map = (
             orders_df.groupby("person_id")["received"]
             .all()
             .reset_index()
-            .rename(columns={"received": "수령"})
+            .rename(columns={"received":"수령"})
         )
 
         pivot_df = pivot_df.merge(received_map, on="person_id", how="left")
@@ -317,8 +301,8 @@ if mode == "📦 수령 확인 모드":
             pivot_df,
             use_container_width=True,
             hide_index=True,
-            disabled=["person_id", "name", "phone"],
             column_config={
+                "person_id": None,
                 "수령": st.column_config.CheckboxColumn("수령")
             }
         )
