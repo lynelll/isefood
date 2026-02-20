@@ -16,8 +16,8 @@ GITHUB_TOKEN  = st.secrets["GITHUB_TOKEN"]
 GITHUB_REPO   = st.secrets["GITHUB_REPO"]
 GITHUB_BRANCH = st.secrets["GITHUB_BRANCH"]
 
-ITEM_PATH  = "items.csv"
-ORDER_PATH = "orders.csv"
+ITEM_PATH  = "./data/items.csv"
+ORDER_PATH = "./data/orders.csv"
 
 headers = {"Authorization": f"token {GITHUB_TOKEN}"}
 
@@ -160,18 +160,46 @@ if mode == "🧾 주문 입력 모드":
     # ----------------------------
     # 📋 실시간 주문 목록 표시
     # ----------------------------
+
     st.markdown("---")
     st.subheader("📋 현재 주문 목록")
 
     if not orders_df.empty:
-        display_df = orders_df.copy()
-        display_df["qty"] = display_df["qty"].astype(int)
-        display_df["received"] = display_df["received"].astype(str).map({
-            "True": "✅",
-            "False": "❌"
+
+        orders_df["qty"] = orders_df["qty"].astype(int)
+        orders_df["received"] = orders_df["received"].astype(str) == "True"
+
+        pivot_df = orders_df.pivot_table(
+            index=["name", "phone"],
+            columns="item_name",
+            values="qty",
+            aggfunc="sum",
+            fill_value=0
+        ).reset_index()
+
+        all_items = items_df["item_name"].tolist()
+
+        for item in all_items:
+            if item not in pivot_df.columns:
+                pivot_df[item] = 0
+
+        pivot_df = pivot_df[["name", "phone"] + all_items]
+
+        received_map = (
+            orders_df.groupby(["name", "phone"])["received"]
+            .all()
+            .reset_index()
+            .rename(columns={"received": "수령"})
+        )
+
+        pivot_df = pivot_df.merge(received_map, on=["name", "phone"], how="left")
+        pivot_df["수령"] = pivot_df["수령"].map({
+            True: "✅",
+            False: "❌"
         })
 
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(pivot_df, use_container_width=True)
+
     else:
         st.info("아직 주문이 없습니다.")
 
