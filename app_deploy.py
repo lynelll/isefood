@@ -71,7 +71,6 @@ orders_df = load_csv_from_github(
     ["item_name", "name", "phone", "qty", "received", "created_at"]
 )
 
-# 전화번호 정리
 if not orders_df.empty:
     orders_df["phone"] = orders_df["phone"].str.replace("-", "").str.strip()
 
@@ -89,7 +88,7 @@ mode = st.radio(
 # ===================================================
 if mode == "🧾 주문 입력 모드":
 
-    col_item, col_order, col_search = st.columns(3)
+    col_item, col_order = st.columns(2)
 
     # ----------------------------
     # 📦 품목 추가
@@ -105,7 +104,6 @@ if mode == "🧾 주문 입력 모드":
                     [[new_item, datetime.now().strftime("%Y-%m-%d")]],
                     columns=["item_name", "created_at"]
                 )
-
                 items_df = pd.concat([items_df, new_row], ignore_index=True)
 
                 if save_csv_to_github(items_df, ITEM_PATH, "update items"):
@@ -160,16 +158,33 @@ if mode == "🧾 주문 입력 모드":
                         st.rerun()
 
     # ----------------------------
-    # 🔍 전화번호 검색
+    # 📋 실시간 주문 목록 표시
     # ----------------------------
-    with col_search:
-        st.subheader("🔍 전화번호 검색")
+    st.markdown("---")
+    st.subheader("📋 현재 주문 목록")
 
-        search_phone_last4 = st.text_input("전화번호 뒤 4자리")
+    if not orders_df.empty:
+        display_df = orders_df.copy()
+        display_df["qty"] = display_df["qty"].astype(int)
+        display_df["received"] = display_df["received"].astype(str).map({
+            "True": "✅",
+            "False": "❌"
+        })
 
-    # ----------------------------
-    # 📌 카드형 검색 결과
-    # ----------------------------
+        st.dataframe(display_df, use_container_width=True)
+    else:
+        st.info("아직 주문이 없습니다.")
+
+# ===================================================
+# 📦 수령 확인 모드
+# ===================================================
+if mode == "📦 수령 확인 모드":
+
+    st.subheader("🔍 전화번호 검색 (뒤 4자리)")
+
+    search_phone_last4 = st.text_input("전화번호 뒤 4자리")
+
+    # 🔹 카드형 검색 결과
     if search_phone_last4 and len(search_phone_last4) == 4:
 
         summary_df = orders_df[
@@ -214,12 +229,8 @@ if mode == "🧾 주문 입력 모드":
         else:
             st.warning("검색 결과가 없습니다.")
 
-# ===================================================
-# 📦 수령 확인 모드
-# ===================================================
-if mode == "📦 수령 확인 모드":
-
-    st.header("📋 전체 주문 목록")
+    st.markdown("---")
+    st.header("📋 전체 수령 관리")
 
     if not orders_df.empty:
 
