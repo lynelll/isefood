@@ -338,16 +338,21 @@ if mode == "📦 수령 확인 모드":
             if item not in pivot_df.columns:
                 pivot_df[item] = 0
 
-        pivot_df = pivot_df[["person_id","name","phone"] + all_items]
-
+        # 🔹 수령 상태 추가 (한 번만 merge)
         received_map = (
             orders_df.groupby("person_id")["received"]
             .all()
             .reset_index()
-            .rename(columns={"received":"수령"})
+            .rename(columns={"received": "수령"})
         )
 
         pivot_df = pivot_df.merge(received_map, on="person_id", how="left")
+
+        # 혹시 컬럼이 없을 경우 대비
+        if "수령" not in pivot_df.columns:
+            pivot_df["수령"] = False
+
+        pivot_df["수령"] = pivot_df["수령"].fillna(False)
         pivot_df["수령"] = pivot_df["수령"].fillna(False)
 
         edited_df = st.data_editor(
