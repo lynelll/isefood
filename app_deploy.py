@@ -180,9 +180,38 @@ if not orders_df.empty:
         ]
 
     if search_phone_last4 and len(search_phone_last4) == 4:
+        orders_df["phone"] = orders_df["phone"].str.replace("-", "").str.strip()
         filtered_df = filtered_df[
             filtered_df["phone"].str[-4:] == search_phone_last4
         ]
+    # -----------------------------------
+    # 🔎 검색 요약 표시
+    # -----------------------------------
+    if search_phone_last4 and len(search_phone_last4) == 4:
+
+        summary_df = filtered_df.copy()
+
+        if not summary_df.empty:
+
+            grouped = summary_df.groupby(["name", "item_name"])["qty"].sum().reset_index()
+
+            for name in grouped["name"].unique():
+
+                st.markdown(f"### 📌 {name}")
+
+                person_df = grouped[grouped["name"] == name]
+
+                summary_lines = []
+
+                for _, row in person_df.iterrows():
+                    summary_lines.append(f"{row['item_name']} {row['qty']}개")
+
+                summary_text = "\n".join(summary_lines)
+
+                st.text(summary_text)
+
+        else:
+            st.warning("해당 전화번호로 검색된 주문이 없습니다.")
 
     # 🔥 사람 기준 pivot
     pivot_df = filtered_df.pivot_table(
