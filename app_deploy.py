@@ -178,57 +178,84 @@ if mode == "🧾 주문 입력 모드":
 # ===================================================
 # 📦 수령 확인 모드
 # ===================================================
+# ===================================================
+# 📦 수령 확인 모드
+# ===================================================
 if mode == "📦 수령 확인 모드":
 
-    st.subheader("🔍 전화번호 검색 (뒤 4자리)")
+    left_col, right_col = st.columns([1, 2])
 
-    search_phone_last4 = st.text_input("전화번호 뒤 4자리")
+    # ----------------------------
+    # 🔍 왼쪽: 전화번호 검색
+    # ----------------------------
+    with left_col:
+        st.subheader("🔍 전화번호 검색 (뒤 4자리)")
+        search_phone_last4 = st.text_input("전화번호 뒤 4자리")
 
-    # 🔹 카드형 검색 결과
-    if search_phone_last4 and len(search_phone_last4) == 4:
+    # ----------------------------
+    # 📌 오른쪽: 검색 결과 카드
+    # ----------------------------
+    with right_col:
 
-        summary_df = orders_df[
-            orders_df["phone"].str[-4:] == search_phone_last4
-        ]
+        if search_phone_last4 and len(search_phone_last4) == 4:
 
-        if not summary_df.empty:
+            summary_df = orders_df[
+                orders_df["phone"].str[-4:] == search_phone_last4
+            ]
 
-            summary_df["qty"] = summary_df["qty"].astype(int)
+            if not summary_df.empty:
 
-            grouped = summary_df.groupby(["name", "item_name"])["qty"].sum().reset_index()
+                summary_df["qty"] = summary_df["qty"].astype(int)
 
-            for name in grouped["name"].unique():
-
-                person_df = grouped[grouped["name"] == name]
-
-                received_status = (
-                    "✅ 수령완료"
-                    if summary_df[summary_df["name"] == name]["received"].astype(str).eq("True").all()
-                    else "❌ 미수령"
+                grouped = (
+                    summary_df
+                    .groupby(["name", "phone", "item_name"])["qty"]
+                    .sum()
+                    .reset_index()
                 )
 
-                summary_html = f"""
-                <div style="
-                    padding:20px;
-                    border-radius:12px;
-                    border:2px solid #2E86C1;
-                    background-color:#F4F9FF;
-                    margin-bottom:15px;
-                ">
-                    <h3>{name}</h3>
-                    <p><b>{received_status}</b></p>
-                """
+                # 사람 단위로 출력
+                for (name, phone) in grouped[["name", "phone"]].drop_duplicates().values:
 
-                for _, row in person_df.iterrows():
-                    summary_html += f"<p>• {row['item_name']} {row['qty']}개</p>"
+                    person_df = grouped[
+                        (grouped["name"] == name) &
+                        (grouped["phone"] == phone)
+                    ]
 
-                summary_html += "</div>"
+                    received_status = (
+                        "✅ 수령완료"
+                        if summary_df[
+                            (summary_df["name"] == name) &
+                            (summary_df["phone"] == phone)
+                        ]["received"].astype(str).eq("True").all()
+                        else "❌ 미수령"
+                    )
 
-                st.markdown(summary_html, unsafe_allow_html=True)
+                    summary_html = f"""
+                    <div style="
+                        padding:20px;
+                        border-radius:12px;
+                        border:2px solid #2E86C1;
+                        background-color:#F4F9FF;
+                        margin-bottom:15px;
+                    ">
+                        <h3>{name} ({phone})</h3>
+                        <p><b>{received_status}</b></p>
+                    """
 
-        else:
-            st.warning("검색 결과가 없습니다.")
+                    for _, row in person_df.iterrows():
+                        summary_html += f"<p>• {row['item_name']} {row['qty']}개</p>"
 
+                    summary_html += "</div>"
+
+                    st.markdown(summary_html, unsafe_allow_html=True)
+
+            else:
+                st.warning("검색 결과가 없습니다.")
+
+    # ----------------------------
+    # 아래 전체 수령 테이블
+    # ----------------------------
     st.markdown("---")
     st.header("📋 전체 수령 관리")
 
