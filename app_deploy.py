@@ -22,7 +22,7 @@ ORDER_PATH = "orders.csv"
 headers = {"Authorization": f"token {GITHUB_TOKEN}"}
 
 # ---------------------------------------------------
-# GitHub에서 CSV 불러오기
+# GitHub CSV 불러오기
 # ---------------------------------------------------
 def load_csv_from_github(path, columns):
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}?ref={GITHUB_BRANCH}"
@@ -35,18 +35,14 @@ def load_csv_from_github(path, columns):
         return pd.DataFrame(columns=columns)
 
 # ---------------------------------------------------
-# GitHub에 CSV 저장
+# GitHub CSV 저장
 # ---------------------------------------------------
 def save_csv_to_github(df, path, message):
-
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
     get_url = f"{url}?ref={GITHUB_BRANCH}"
 
     old = requests.get(get_url, headers=headers)
-
-    sha = None
-    if old.status_code == 200:
-        sha = old.json().get("sha")
+    sha = old.json().get("sha") if old.status_code == 200 else None
 
     content = base64.b64encode(df.to_csv(index=False).encode()).decode()
 
@@ -60,7 +56,6 @@ def save_csv_to_github(df, path, message):
         payload["sha"] = sha
 
     res = requests.put(url, headers=headers, data=json.dumps(payload))
-
     return res.status_code in [200, 201]
 
 # ---------------------------------------------------
@@ -76,204 +71,208 @@ orders_df = load_csv_from_github(
     ["item_name", "name", "phone", "qty", "received", "created_at"]
 )
 
+# 전화번호 정리
+if not orders_df.empty:
+    orders_df["phone"] = orders_df["phone"].str.replace("-", "").str.strip()
+
 # ===================================================
-# 🔹 상단 한 행 (3컬럼)
+# 🔀 모드 선택
 # ===================================================
-col_item, col_order, col_search = st.columns(3)
+mode = st.radio(
+    "모드 선택",
+    ["🧾 주문 입력 모드", "📦 수령 확인 모드"],
+    horizontal=True
+)
 
-# ----------------------------
-# 📦 품목 추가
-# ----------------------------
-with col_item:
-    st.subheader("📦 품목 추가")
+# ===================================================
+# 🧾 주문 입력 모드
+# ===================================================
+if mode == "🧾 주문 입력 모드":
 
-    new_item = st.text_input("품목 이름", key="new_item")
+    col_item, col_order, col_search = st.columns(3)
 
-    if st.button("품목 추가"):
-        if new_item and new_item not in items_df["item_name"].values:
-            new_row = pd.DataFrame(
-                [[new_item, datetime.now().strftime("%Y-%m-%d")]],
-                columns=["item_name", "created_at"]
-            )
+    # ----------------------------
+    # 📦 품목 추가
+    # ----------------------------
+    with col_item:
+        st.subheader("📦 품목 추가")
 
-            items_df = pd.concat([items_df, new_row], ignore_index=True)
+        new_item = st.text_input("품목 이름")
 
-            if save_csv_to_github(items_df, ITEM_PATH, "update items"):
-                st.success("품목 저장 완료")
-                st.rerun()
-            else:
-                st.error("저장 실패")
-
-# ----------------------------
-# 🧾 주문자 추가
-# ----------------------------
-with col_order:
-    st.subheader("🧾 주문자 추가")
-
-    if not items_df.empty:
-
-        selected_item = st.selectbox(
-            "품목 선택",
-            items_df["item_name"].tolist(),
-            key="select_item"
-        )
-
-        name = st.text_input("이름", key="order_name")
-        phone = st.text_input("핸드폰번호", key="order_phone")
-        qty = st.number_input("수량", min_value=1, step=1, key="order_qty")
-
-        if st.button("주문 추가"):
-            if name and phone:
-
-                new_order = pd.DataFrame(
-                    [[
-                        selected_item,
-                        name,
-                        str(phone),
-                        qty,
-                        "False",
-                        datetime.now().strftime("%Y-%m-%d")
-                    ]],
-                    columns=[
-                        "item_name",
-                        "name",
-                        "phone",
-                        "qty",
-                        "received",
-                        "created_at",
-                    ],
+        if st.button("품목 추가"):
+            if new_item and new_item not in items_df["item_name"].values:
+                new_row = pd.DataFrame(
+                    [[new_item, datetime.now().strftime("%Y-%m-%d")]],
+                    columns=["item_name", "created_at"]
                 )
 
-                orders_df = pd.concat([orders_df, new_order], ignore_index=True)
+                items_df = pd.concat([items_df, new_row], ignore_index=True)
 
-                if save_csv_to_github(orders_df, ORDER_PATH, "update orders"):
-                    st.success("주문 저장 완료")
+                if save_csv_to_github(items_df, ITEM_PATH, "update items"):
+                    st.success("품목 저장 완료")
                     st.rerun()
-                else:
-                    st.error("저장 실패")
 
-# ----------------------------
-# 🔍 주문 검색
-# ----------------------------
-with col_search:
-    st.subheader("🔍 주문 검색")
+    # ----------------------------
+    # 🧾 주문 추가
+    # ----------------------------
+    with col_order:
+        st.subheader("🧾 주문자 추가")
 
-    search_name = st.text_input("이름 검색", key="search_name")
-    search_phone_last4 = st.text_input("전화번호 뒤 4자리", key="search_phone")
+        if not items_df.empty:
 
-# ===================================================
-# 🔹 아래 전체 주문 목록
-# ===================================================
-st.markdown("---")
-st.header("📋 전체 주문 목록 (이름 기준)")
+            selected_item = st.selectbox(
+                "품목 선택",
+                items_df["item_name"].tolist()
+            )
 
-if not orders_df.empty:
+            name = st.text_input("이름")
+            phone = st.text_input("핸드폰번호")
+            qty = st.number_input("수량", min_value=1, step=1)
 
-    orders_df["qty"] = orders_df["qty"].astype(int)
-    orders_df["received"] = orders_df["received"].astype(str) == "True"
+            if st.button("주문 추가"):
+                if name and phone:
 
-    filtered_df = orders_df.copy()
+                    phone = phone.replace("-", "").strip()
 
-    if search_name:
-        filtered_df = filtered_df[
-            filtered_df["name"].str.contains(search_name, na=False)
-        ]
+                    new_order = pd.DataFrame(
+                        [[
+                            selected_item,
+                            name,
+                            phone,
+                            qty,
+                            "False",
+                            datetime.now().strftime("%Y-%m-%d")
+                        ]],
+                        columns=[
+                            "item_name",
+                            "name",
+                            "phone",
+                            "qty",
+                            "received",
+                            "created_at",
+                        ],
+                    )
 
+                    orders_df = pd.concat([orders_df, new_order], ignore_index=True)
+
+                    if save_csv_to_github(orders_df, ORDER_PATH, "update orders"):
+                        st.success("주문 저장 완료")
+                        st.rerun()
+
+    # ----------------------------
+    # 🔍 전화번호 검색
+    # ----------------------------
+    with col_search:
+        st.subheader("🔍 전화번호 검색")
+
+        search_phone_last4 = st.text_input("전화번호 뒤 4자리")
+
+    # ----------------------------
+    # 📌 카드형 검색 결과
+    # ----------------------------
     if search_phone_last4 and len(search_phone_last4) == 4:
-        orders_df["phone"] = orders_df["phone"].str.replace("-", "").str.strip()
-        filtered_df = filtered_df[
-            filtered_df["phone"].str[-4:] == search_phone_last4
-        ]
-    # -----------------------------------
-    # 🔎 검색 요약 표시
-    # -----------------------------------
-    if search_phone_last4 and len(search_phone_last4) == 4:
 
-        summary_df = filtered_df.copy()
+        summary_df = orders_df[
+            orders_df["phone"].str[-4:] == search_phone_last4
+        ]
 
         if not summary_df.empty:
+
+            summary_df["qty"] = summary_df["qty"].astype(int)
 
             grouped = summary_df.groupby(["name", "item_name"])["qty"].sum().reset_index()
 
             for name in grouped["name"].unique():
 
-                st.markdown(f"### 📌 {name}")
-
                 person_df = grouped[grouped["name"] == name]
 
-                summary_lines = []
+                received_status = (
+                    "✅ 수령완료"
+                    if summary_df[summary_df["name"] == name]["received"].astype(str).eq("True").all()
+                    else "❌ 미수령"
+                )
+
+                summary_html = f"""
+                <div style="
+                    padding:20px;
+                    border-radius:12px;
+                    border:2px solid #2E86C1;
+                    background-color:#F4F9FF;
+                    margin-bottom:15px;
+                ">
+                    <h3>{name}</h3>
+                    <p><b>{received_status}</b></p>
+                """
 
                 for _, row in person_df.iterrows():
-                    summary_lines.append(f"{row['item_name']} {row['qty']}개")
+                    summary_html += f"<p>• {row['item_name']} {row['qty']}개</p>"
 
-                summary_text = "\n".join(summary_lines)
+                summary_html += "</div>"
 
-                st.text(summary_text)
+                st.markdown(summary_html, unsafe_allow_html=True)
 
         else:
-            st.warning("해당 전화번호로 검색된 주문이 없습니다.")
+            st.warning("검색 결과가 없습니다.")
 
-    # 🔥 사람 기준 pivot
-    pivot_df = filtered_df.pivot_table(
-        index=["name", "phone"],
-        columns="item_name",
-        values="qty",
-        aggfunc="sum",
-        fill_value=0
-    ).reset_index()
+# ===================================================
+# 📦 수령 확인 모드
+# ===================================================
+if mode == "📦 수령 확인 모드":
 
-    # 🔥 모든 품목 컬럼 강제 생성
-    all_items = items_df["item_name"].tolist()
+    st.header("📋 전체 주문 목록")
 
-    for item in all_items:
-        if item not in pivot_df.columns:
-            pivot_df[item] = 0
+    if not orders_df.empty:
 
-    # 컬럼 정렬
-    pivot_df = pivot_df[["name", "phone"] + all_items]
+        orders_df["qty"] = orders_df["qty"].astype(int)
+        orders_df["received"] = orders_df["received"].astype(str) == "True"
 
-    # 🔥 사람 기준 수령 여부
-    received_map = (
-        filtered_df.groupby(["name", "phone"])["received"]
-        .all()
-        .reset_index()
-        .rename(columns={"received": "수령"})
-    )
+        pivot_df = orders_df.pivot_table(
+            index=["name", "phone"],
+            columns="item_name",
+            values="qty",
+            aggfunc="sum",
+            fill_value=0
+        ).reset_index()
 
-    pivot_df = pivot_df.merge(received_map, on=["name", "phone"], how="left")
-    pivot_df["수령"] = pivot_df["수령"].fillna(False)
+        all_items = items_df["item_name"].tolist()
 
-    # 🔥 수령 체크박스 표시
-    edited_df = st.data_editor(
-        pivot_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "수령": st.column_config.CheckboxColumn("수령")
-        },
-        key="pivot_editor"
-    )
+        for item in all_items:
+            if item not in pivot_df.columns:
+                pivot_df[item] = 0
 
-    # 🔥 수령 저장
-    if st.button("💾 수령 상태 저장"):
+        pivot_df = pivot_df[["name", "phone"] + all_items]
 
-        for _, row in edited_df.iterrows():
-            name = row["name"]
-            phone = row["phone"]
-            received_value = str(row["수령"])
+        received_map = (
+            orders_df.groupby(["name", "phone"])["received"]
+            .all()
+            .reset_index()
+            .rename(columns={"received": "수령"})
+        )
 
-            mask = (
-                (orders_df["name"] == name) &
-                (orders_df["phone"] == phone)
-            )
+        pivot_df = pivot_df.merge(received_map, on=["name", "phone"], how="left")
+        pivot_df["수령"] = pivot_df["수령"].fillna(False)
 
-            orders_df.loc[mask, "received"] = received_value
+        edited_df = st.data_editor(
+            pivot_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "수령": st.column_config.CheckboxColumn("수령")
+            }
+        )
 
-        if save_csv_to_github(orders_df, ORDER_PATH, "update received status"):
-            st.success("수령 상태 저장 완료")
-            st.rerun()
-        else:
-            st.error("저장 실패")
+        if st.button("💾 수령 상태 저장"):
 
-else:
-    st.info("아직 주문이 없습니다.")
+            for _, row in edited_df.iterrows():
+                mask = (
+                    (orders_df["name"] == row["name"]) &
+                    (orders_df["phone"] == row["phone"])
+                )
+                orders_df.loc[mask, "received"] = str(row["수령"])
+
+            if save_csv_to_github(orders_df, ORDER_PATH, "update received status"):
+                st.success("수령 상태 저장 완료")
+                st.rerun()
+
+    else:
+        st.info("아직 주문이 없습니다.")
