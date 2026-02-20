@@ -186,7 +186,21 @@ if mode == "🧾 주문 입력 모드":
         )
 
         pivot_df = pivot_df.merge(received_map, on="person_id", how="left")
+        received_map = (
+            orders_df.groupby("person_id")["received"]
+            .all()
+            .reset_index()
+            .rename(columns={"received": "수령"})
+        )
+
+        pivot_df = pivot_df.merge(received_map, on="person_id", how="left")
         pivot_df["수령"] = pivot_df["수령"].fillna(False)
+
+        # 🔥 텍스트 변환
+        pivot_df["수령"] = pivot_df["수령"].map({
+            True: "수령",
+            False: "미수령"
+        })
 
         # 🔹 삭제 컬럼 추가
         pivot_df["삭제"] = False
@@ -197,7 +211,7 @@ if mode == "🧾 주문 입력 모드":
             hide_index=True,
             column_config={
                 "person_id": None,
-                "수령": st.column_config.CheckboxColumn("수령", disabled=True),
+                "수령": st.column_config.TextColumn("수령", disabled=True),
                 "삭제": st.column_config.CheckboxColumn("삭제")
             }
         )
